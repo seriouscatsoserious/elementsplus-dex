@@ -7,7 +7,7 @@ import { ratio } from "./amount";
 const A = "a".repeat(64);
 const B = "b".repeat(64);
 const TXID = "c1".repeat(32);
-const offer = { version: 1, network: "ecx-alpha", genesis_hash: "00", tx: stubOfferTxHex(TXID, 3), give: { asset_id: A, amount: "1000" }, want: { asset_id: B, amount: "5000" } };
+const offer = { version: 1, network: "ecx-beta", genesis_hash: "00", tx: stubOfferTxHex(TXID, 3), give: { asset_id: A, amount: "1000" }, want: { asset_id: B, amount: "5000" } };
 
 function fakeFetch(routes: Record<string, { status?: number; body: unknown } | (() => never)>) {
   const calls: { url: string; init?: RequestInit }[] = [];
@@ -94,8 +94,8 @@ describe("createApi", () => {
   });
 
   it("reads flat health and 503 health bodies", async () => {
-    const { fn } = fakeFetch({ "GET /api/health": { status: 503, body: { ok: false, tip: null, network: "ecx-alpha", genesis_hash: "ff", policy_asset: A } } });
-    expect(await createApi("/api", fn).health()).toMatchObject({ ok: false, policyAsset: A, network: "ecx-alpha" });
+    const { fn } = fakeFetch({ "GET /api/health": { status: 503, body: { ok: false, tip: null, network: "ecx-beta", genesis_hash: "ff", policy_asset: A } } });
+    expect(await createApi("/api", fn).health()).toMatchObject({ ok: false, policyAsset: A, network: "ecx-beta" });
   });
 
   it("maps errors", async () => {

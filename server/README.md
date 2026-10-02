@@ -36,7 +36,7 @@ cargo run
 | `DB_PATH` | `dex.sqlite3` | SQLite file (created on start) |
 | `GENESIS_HASH` | ECX Alpha genesis | Offers must carry this `genesis_hash` |
 | `POLICY_ASSET` | ECX Alpha policy asset | Quote asset of native markets |
-| `NETWORK_NAME` | `ecx-alpha` | Offers must carry this `network` |
+| `NETWORK_NAME` | `ecx-beta` | Offers must carry this `network` |
 | `ADDRESS_HRP` | `elements` | HRP used to render `maker_address` (`ert` on stock regtest) |
 | `CORS_ORIGINS` | `http://localhost:5173,http://127.0.0.1:5173` | Comma list; `*` = any; empty = no CORS |
 | `MONITOR_INTERVAL_SECS` | `5` | Offer monitor period |

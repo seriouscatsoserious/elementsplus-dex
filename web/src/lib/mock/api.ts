@@ -99,7 +99,7 @@ const INTERVALS: Record<string, number> = { "15m": 900, "1h": 3600, "4h": 14400,
 async function handle(method: string, url: URL, body: unknown): Promise<Response> {
   const p = url.pathname.replace(/^.*\/api/, "");
   const parts = p.split("/").filter(Boolean);
-  if (p === "/health") return json({ ok: true, tip: 18_204, network: "ecx-alpha", genesis_hash: GENESIS, policy_asset: ECX });
+  if (p === "/health") return json({ ok: true, tip: 18_204, network: "ecx-beta", genesis_hash: GENESIS, policy_asset: ECX });
   if (p === "/assets" && method === "GET") return page(mode === "empty" ? [] : [...state.assets.values()]);
   if (p === "/assets" && method === "POST") {
     const b = body as { issuance_txid: string; vin: number; contract: MockAsset["contract"]; description?: string; website?: string; asset_id?: string };

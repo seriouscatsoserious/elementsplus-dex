@@ -23,7 +23,7 @@ pub const TEST_POLICY: &str = "5ac9f65c0efcc4775e0baec4ec03abdde22473cd3cf33c041
 
 pub fn test_network() -> Network {
     Network {
-        name: "ecx-alpha".into(),
+        name: "ecx-beta".into(),
         genesis_hash: BlockHash::from_str(TEST_GENESIS).unwrap(),
         policy_asset: AssetId::from_str(TEST_POLICY).unwrap(),
         address_hrp: "ert".into(),

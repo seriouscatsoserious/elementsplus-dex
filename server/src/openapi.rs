@@ -48,7 +48,7 @@ fn param_ref(name: &str) -> Value {
 fn example_offer() -> Value {
     json!({
         "version": 1,
-        "network": "ecx-alpha",
+        "network": "ecx-beta",
         "genesis_hash": GENESIS,
         "tx": "020000000101f4633a…(hex)…",
         "give": { "asset_id": ASSET, "amount": "1000000000" },
@@ -306,8 +306,8 @@ fn paths() -> Value {
             "operationId": "getHealth",
             "summary": "Liveness, chain tip and chain parameters",
             "responses": {
-                "200": ok("Explorer reachable", schema_ref("Health"), json!({ "ok": true, "tip": 102, "network": "ecx-alpha", "genesis_hash": GENESIS, "policy_asset": POLICY })),
-                "503": ok("Explorer unreachable", schema_ref("Health"), json!({ "ok": false, "tip": null, "network": "ecx-alpha", "genesis_hash": GENESIS, "policy_asset": POLICY, "error": { "code": "upstream_error", "message": "block explorer unavailable" } }))
+                "200": ok("Explorer reachable", schema_ref("Health"), json!({ "ok": true, "tip": 102, "network": "ecx-beta", "genesis_hash": GENESIS, "policy_asset": POLICY })),
+                "503": ok("Explorer unreachable", schema_ref("Health"), json!({ "ok": false, "tip": null, "network": "ecx-beta", "genesis_hash": GENESIS, "policy_asset": POLICY, "error": { "code": "upstream_error", "message": "block explorer unavailable" } }))
             }
         }},
         "/api/openapi.json": { "get": {

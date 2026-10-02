@@ -190,7 +190,7 @@ async fn offer_lifecycle_against_mock_esplora() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(health["ok"], true);
     assert_eq!(health["tip"], 123);
-    assert_eq!(health["network"], "ecx-alpha");
+    assert_eq!(health["network"], "ecx-beta");
     assert_eq!(health["genesis_hash"], TEST_GENESIS);
     assert_eq!(health["policy_asset"], policy.to_string());
 

@@ -29,7 +29,7 @@ function rng(seed: number) {
 }
 
 export const GENESIS = fakeHex("genesis");
-export const NETWORK = "ecx-alpha";
+export const NETWORK = "ecx-beta";
 export const ECX = fakeHex("ECX");
 
 export interface MockAsset {

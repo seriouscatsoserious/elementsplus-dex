@@ -10,7 +10,7 @@ pub const DEFAULT_GENESIS_HASH: &str =
     "672af009bd90bfc6527a5a9dda4c83aba0048c15cff3697d07e89a7f96fa5bcd";
 pub const DEFAULT_POLICY_ASSET: &str =
     "62dce3bd80dc4b0503e7ccbb3fcfa4d7adfd64b4e0cc78fa5e1754b88f1d2da4";
-pub const DEFAULT_NETWORK_NAME: &str = "ecx-alpha";
+pub const DEFAULT_NETWORK_NAME: &str = "ecx-beta";
 pub const DEFAULT_ADDRESS_HRP: &str = "elements";
 pub const DEFAULT_LISTEN: &str = "127.0.0.1:8790";
 pub const DEFAULT_ESPLORA_URL: &str = "http://127.0.0.1:43199/api";
