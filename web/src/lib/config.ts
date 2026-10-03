@@ -9,7 +9,20 @@ export const ENV_POLICY_ASSET: string | undefined = env.VITE_POLICY_ASSET?.toLow
 export const EXPLORER_URL: string | undefined = env.VITE_EXPLORER_URL?.replace(/\/+$/, "") || undefined;
 export const WALLET_INSTALL_URL: string =
   env.VITE_WALLET_INSTALL_URL || "https://github.com/elementsplus/elementsplus-wallet-extension";
-export const NETWORK_LABEL: string = env.VITE_NETWORK_LABEL || "ECX Alpha";
+export const NETWORK_LABEL: string = env.VITE_NETWORK_LABEL || "eCash Beta · Elements";
+
+/** Display names for the network profile ids the server and wallet use. */
+const NETWORK_NAMES: Record<string, string> = {
+  "ecx-beta": "eCash Beta · Elements",
+  "ecx-mainnet": "eCash · Elements",
+  "elementsplus-regtest": "Local test chain",
+};
+
+/** Human label for a network profile id (falls back to the id itself). */
+export function networkLabel(id: string | null | undefined): string {
+  if (!id) return NETWORK_LABEL;
+  return NETWORK_NAMES[id] ?? id;
+}
 
 export const txUrl = (txid: string): string | undefined => (EXPLORER_URL ? `${EXPLORER_URL}/tx/${txid}` : undefined);
 

@@ -197,7 +197,7 @@ export function parseConnect(r: unknown): ConnectResult {
   return {
     address: asStr(o.address, "address"),
     network: {
-      name: typeof n.name === "string" ? n.name : "ECX Alpha",
+      name: typeof n.name === "string" ? n.name : "eCash Beta · Elements",
       genesisHash: typeof n.genesisHash === "string" ? n.genesisHash : "",
       policyAsset: typeof n.policyAsset === "string" ? n.policyAsset.toLowerCase() : "",
     },

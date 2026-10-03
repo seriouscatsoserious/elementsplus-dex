@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink } from "react-router";
-import { LLMS_TXT_URL, NETWORK_LABEL, OPENAPI_URL, WALLET_INSTALL_URL } from "../lib/config";
+import { LLMS_TXT_URL, OPENAPI_URL, WALLET_INSTALL_URL, networkLabel } from "../lib/config";
 import { shortAddress } from "../lib/wallet";
 import { useDex } from "../state/dex";
 import { useWallet } from "../state/wallet";
@@ -82,7 +82,8 @@ function WalletButton() {
 export function Header() {
   const dex = useDex();
   const w = useWallet();
-  const name = w.network?.name || NETWORK_LABEL;
+  // The server reports the network profile id; a connected wallet reports its own display name.
+  const name = w.network?.name || networkLabel(dex.health?.network);
   return (
     <>
       <nav className="nav">

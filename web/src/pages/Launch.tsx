@@ -163,7 +163,7 @@ export function LaunchPage() {
         </div>
         <label className="f">
           <span>Description</span>
-          <textarea className="in" style={{ height: 76, padding: "10px 12px", resize: "none" }} value={description} maxLength={1000} placeholder="A community token on ECX Alpha." onChange={(e) => setDescription(e.target.value)} disabled={busy} />
+          <textarea className="in" style={{ height: 76, padding: "10px 12px", resize: "none" }} value={description} maxLength={1000} placeholder="A community token on eCash." onChange={(e) => setDescription(e.target.value)} disabled={busy} />
         </label>
         <div className="two">
           <label className="f">
