@@ -1149,3 +1149,5 @@ td.r {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+.demo-banner{background:#2a2216;color:#F2B661;font-size:13px;text-align:center;padding:8px 16px;border-bottom:1px solid #3a2f1c}

@@ -1,5 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router";
 import { Footer, Header } from "./components/Header";
+import { MOCK_API, MOCK_WALLET } from "./lib/config";
 import { LaunchPage } from "./pages/Launch";
 import { MarketsPage } from "./pages/Markets";
 import { SwapPage } from "./pages/Swap";
@@ -9,11 +10,16 @@ import { WalletProvider } from "./state/wallet";
 
 export function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/u, "")}>
       <ToastProvider>
         <WalletProvider>
           <DexProvider>
             <div className="app">
+              {(MOCK_API || MOCK_WALLET) && (
+                <div className="demo-banner" role="note">
+                  Demo mode: the wallet, markets and trades are simulated in your browser. No real coins.
+                </div>
+              )}
               <Header />
               <Routes>
                 <Route path="/" element={<Navigate to="/swap" replace />} />

@@ -46,7 +46,7 @@ export function installMockWallet(): void {
           if (walletMode === "reject") throw err(4001, "User rejected the request");
           connected = true;
           emit("accountsChanged", [WALLET_ADDRESS]);
-          return { address: WALLET_ADDRESS, network: { name: "ECX Alpha", genesisHash: GENESIS, policyAsset: ECX } };
+          return { address: WALLET_ADDRESS, network: { name: "Demo (simulated)", genesisHash: GENESIS, policyAsset: ECX } };
         case "ep_disconnect":
           connected = false;
           emit("disconnect");
