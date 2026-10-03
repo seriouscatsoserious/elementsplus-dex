@@ -56,6 +56,40 @@ impl OfferError {
             message: message.into(),
         }
     }
+
+    pub fn internal(message: impl Into<String>) -> Self {
+        Self::new("internal_error", message)
+    }
+}
+
+/// Any offer the book accepts: v1 explicit P2WPKH offers (SPEC §2) and v2
+/// Instant lockbox orders (Instant SPEC §9.1). Serialized without a tag, so
+/// each variant round-trips as its own wire format.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(untagged)]
+pub enum AnyOffer {
+    Instant(crate::instant::InstantOffer),
+    Plain(Offer),
+}
+
+impl AnyOffer {
+    pub fn give(&self) -> &OfferLeg {
+        match self {
+            Self::Instant(offer) => &offer.give,
+            Self::Plain(offer) => &offer.give,
+        }
+    }
+
+    pub fn want(&self) -> &OfferLeg {
+        match self {
+            Self::Instant(offer) => &offer.want,
+            Self::Plain(offer) => &offer.want,
+        }
+    }
+
+    pub fn is_instant(&self) -> bool {
+        matches!(self, Self::Instant(_))
+    }
 }
 
 fn fail<T>(code: &'static str, message: impl Into<String>) -> Result<T, OfferError> {
@@ -105,8 +139,26 @@ pub fn p2wpkh_address(script: &Script, hrp: &str) -> Result<String, OfferError> 
         .map_err(|_| OfferError::new("internal_error", "address encoding failed"))
 }
 
-/// Parse a P2WPKH bech32 address of any HRP into its script (used for lookups).
-pub fn p2wpkh_script_from_address(address: &str) -> Result<Script, OfferError> {
+/// Render a maker script as an unconfidential segwit address: v0 P2WPKH
+/// (bech32) or v1 Taproot such as an Instant lockbox (bech32m). Anything else
+/// is rendered as `script:<hex>`.
+pub fn script_address(script: &Script, hrp: &str) -> String {
+    use elements::bitcoin::bech32::{segwit, Hrp};
+    let encoded = Hrp::parse(hrp).ok().and_then(|hrp| {
+        if script.is_v0_p2wpkh() {
+            segwit::encode(hrp, segwit::VERSION_0, &script.as_bytes()[2..]).ok()
+        } else if script.is_v1_p2tr() {
+            segwit::encode(hrp, segwit::VERSION_1, &script.as_bytes()[2..]).ok()
+        } else {
+            None
+        }
+    });
+    encoded.unwrap_or_else(|| format!("script:{}", hex::encode(script.as_bytes())))
+}
+
+/// Parse an unconfidential P2WPKH (bech32) or Taproot (bech32m) address of
+/// any HRP into its script (used for lookups).
+pub fn script_from_address(address: &str) -> Result<Script, OfferError> {
     use elements::bitcoin::bech32::segwit;
     if address.len() > 120 || address != address.to_ascii_lowercase() {
         return fail(
@@ -116,13 +168,17 @@ pub fn p2wpkh_script_from_address(address: &str) -> Result<Script, OfferError> {
     }
     let (_, version, program) = segwit::decode(address)
         .map_err(|_| OfferError::new("invalid_address", "invalid bech32 address"))?;
-    if version != segwit::VERSION_0 || program.len() != 20 {
-        return fail(
-            "invalid_address",
-            "only unconfidential P2WPKH addresses are supported",
-        );
-    }
-    let mut bytes = vec![0x00, 0x14];
+    let prefix = match (version, program.len()) {
+        (segwit::VERSION_0, 20) => [0x00, 0x14],
+        (segwit::VERSION_1, 32) => [0x51, 0x20],
+        _ => {
+            return fail(
+                "invalid_address",
+                "only unconfidential P2WPKH or Taproot addresses are supported",
+            )
+        }
+    };
+    let mut bytes = prefix.to_vec();
     bytes.extend(program);
     Ok(Script::from(bytes))
 }
@@ -404,9 +460,14 @@ mod tests {
         assert_eq!(decoded.outpoint, fixture.outpoint());
         assert!(decoded.maker_address.starts_with("ert1q"));
         assert_eq!(
-            p2wpkh_script_from_address(&decoded.maker_address).unwrap(),
+            script_from_address(&decoded.maker_address).unwrap(),
             decoded.maker_script
         );
+        let taproot = Script::from([[0x51, 0x20].as_slice(), &[7u8; 32]].concat());
+        let address = script_address(&taproot, "ert");
+        assert!(address.starts_with("ert1p"), "{address}");
+        assert_eq!(script_from_address(&address).unwrap(), taproot);
+        assert!(script_address(&Script::new(), "ert").starts_with("script:"));
     }
 
     #[test]

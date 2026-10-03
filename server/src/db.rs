@@ -7,7 +7,8 @@ use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::Serialize;
 
 use crate::error::{ApiError, ApiResult};
-use crate::offer::Offer;
+use crate::instant::{BondCheck, PromiseWire, CHALLENGE_WINDOW};
+use crate::offer::AnyOffer;
 
 const SCHEMA: &str = r#"
 CREATE TABLE IF NOT EXISTS offers (
@@ -34,6 +35,10 @@ CREATE TABLE IF NOT EXISTS offers (
     created_at    INTEGER NOT NULL,
     closed_at     INTEGER,
     spend_txid    TEXT,
+    kind          INTEGER NOT NULL DEFAULT 1,
+    instant_operator TEXT,
+    lockbox_expiry INTEGER,
+    lockbox_owner TEXT,
     UNIQUE (txid, vout)
 );
 CREATE INDEX IF NOT EXISTS offers_market ON offers (base, quote, status, price);
@@ -68,6 +73,49 @@ CREATE TABLE IF NOT EXISTS idempotency (
     PRIMARY KEY (route, key)
 );
 
+CREATE TABLE IF NOT EXISTS instant_operators (
+    operator          TEXT PRIMARY KEY,
+    sequence          TEXT    NOT NULL,
+    signed_json       TEXT    NOT NULL,
+    api_url           TEXT    NOT NULL,
+    verified          INTEGER NOT NULL DEFAULT 0,
+    bonds_json        TEXT    NOT NULL DEFAULT '[]',
+    max_refund_height INTEGER NOT NULL DEFAULT 0,
+    cover             TEXT    NOT NULL DEFAULT '0',
+    error             TEXT,
+    created_at        INTEGER NOT NULL,
+    updated_at        INTEGER NOT NULL,
+    checked_at        INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS instant_receipts (
+    seq           INTEGER PRIMARY KEY AUTOINCREMENT,
+    operator      TEXT    NOT NULL,
+    txid          TEXT    NOT NULL,
+    commitment    TEXT    NOT NULL,
+    value_at_risk TEXT    NOT NULL,
+    promises_json TEXT    NOT NULL,
+    receipt_json  TEXT,
+    received_at   INTEGER NOT NULL,
+    confirmed     INTEGER NOT NULL DEFAULT 0,
+    conflict      INTEGER NOT NULL DEFAULT 0,
+    checked_at    INTEGER NOT NULL DEFAULT 0,
+    UNIQUE (operator, txid)
+);
+CREATE INDEX IF NOT EXISTS instant_receipts_operator ON instant_receipts (operator, seq);
+CREATE INDEX IF NOT EXISTS instant_receipts_pending ON instant_receipts (confirmed, checked_at);
+
+CREATE TABLE IF NOT EXISTS instant_promises (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    operator    TEXT    NOT NULL,
+    lockbox     TEXT    NOT NULL,
+    commitment  TEXT    NOT NULL,
+    sig         TEXT    NOT NULL,
+    receipt_seq INTEGER NOT NULL REFERENCES instant_receipts (seq),
+    UNIQUE (operator, lockbox, commitment)
+);
+CREATE INDEX IF NOT EXISTS instant_promises_lockbox ON instant_promises (operator, lockbox);
+
 CREATE TABLE IF NOT EXISTS assets (
     asset_id      TEXT PRIMARY KEY,
     token_id      TEXT,
@@ -101,6 +149,7 @@ impl Db {
         // WAL is unavailable for in-memory databases; ignore the answer.
         let _: String = conn.query_row("PRAGMA journal_mode = WAL", [], |row| row.get(0))?;
         conn.execute_batch(SCHEMA)?;
+        migrate(&conn)?;
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
         })
@@ -123,14 +172,36 @@ impl Db {
     }
 }
 
+/// Add columns introduced after the first release to existing databases.
+fn migrate(conn: &Connection) -> rusqlite::Result<()> {
+    let mut statement = conn.prepare("PRAGMA table_info(offers)")?;
+    let columns = statement
+        .query_map([], |row| row.get::<_, String>(1))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    for (name, definition) in [
+        ("kind", "INTEGER NOT NULL DEFAULT 1"),
+        ("instant_operator", "TEXT"),
+        ("lockbox_expiry", "INTEGER"),
+        ("lockbox_owner", "TEXT"),
+    ] {
+        if !columns.iter().any(|column| column == name) {
+            conn.execute_batch(&format!("ALTER TABLE offers ADD COLUMN {name} {definition}"))?;
+        }
+    }
+    conn.execute_batch(
+        "CREATE INDEX IF NOT EXISTS offers_owner ON offers (lockbox_owner, status);\n\
+         CREATE INDEX IF NOT EXISTS offers_operator ON offers (instant_operator, status);",
+    )
+}
+
 /// Stored offer, also the JSON served for book/maker listings. The original
 /// offer fields are flattened at the top level *and* repeated under `offer`
 /// so clients can hand `entry.offer` to the wallet unchanged.
 #[derive(Clone, Debug, Serialize)]
 pub struct OfferRecord {
     #[serde(flatten)]
-    pub wire: Offer,
-    pub offer: Offer,
+    pub wire: AnyOffer,
+    pub offer: AnyOffer,
     pub id: i64,
     pub outpoint: String,
     pub txid: String,
@@ -152,16 +223,33 @@ pub struct OfferRecord {
     pub created_at: i64,
     pub closed_at: Option<i64>,
     pub spend_txid: Option<String>,
+    /// Instant lockbox order (offer v2) whose operator is announced with a
+    /// verified bond that outlives the lockbox expiry by the challenge window.
+    /// Evaluated at read time.
+    pub instant: bool,
+    /// Operator x-only key of an instant lockbox order (null for v1 offers).
+    pub operator: Option<String>,
+    /// Lockbox EXPIRY height (null for v1 offers).
+    pub lockbox_expiry: Option<u32>,
 }
 
-pub const OFFER_COLUMNS: &str = "id, txid, vout, offer_json, maker_script, maker_address, base, quote, side, \
-     base_amount, quote_amount, price_num, price_den, price, status, created_at, closed_at, spend_txid";
+pub const OFFER_COLUMNS: &str = concat!(
+    "id, txid, vout, offer_json, maker_script, maker_address, base, quote, side, ",
+    "base_amount, quote_amount, price_num, price_den, price, status, created_at, closed_at, spend_txid, ",
+    "instant_operator, lockbox_expiry, ",
+    "(kind = 2 AND EXISTS (SELECT 1 FROM instant_operators op ",
+    "WHERE op.operator = offers.instant_operator AND op.verified = 1 ",
+    "AND op.max_refund_height >= offers.lockbox_expiry + 144)) AS instant_live"
+);
+
+// The literal above must use the protocol's challenge window.
+const _: () = assert!(CHALLENGE_WINDOW == 144);
 
 pub fn offer_from_row(row: &Row<'_>) -> rusqlite::Result<OfferRecord> {
     let txid: String = row.get(1)?;
     let vout: u32 = row.get(2)?;
     let json: String = row.get(3)?;
-    let wire: Offer = serde_json::from_str(&json).map_err(|error| {
+    let wire: AnyOffer = serde_json::from_str(&json).map_err(|error| {
         rusqlite::Error::FromSqlConversionFailure(3, rusqlite::types::Type::Text, Box::new(error))
     })?;
     Ok(OfferRecord {
@@ -185,6 +273,9 @@ pub fn offer_from_row(row: &Row<'_>) -> rusqlite::Result<OfferRecord> {
         created_at: row.get(15)?,
         closed_at: row.get(16)?,
         spend_txid: row.get(17)?,
+        operator: row.get(18)?,
+        lockbox_expiry: row.get(19)?,
+        instant: row.get(20)?,
     })
 }
 
@@ -208,6 +299,11 @@ pub struct NewOffer {
     pub price_den: String,
     pub price: f64,
     pub created_at: i64,
+    /// 1 = v1 explicit offer, 2 = Instant lockbox order.
+    pub kind: u32,
+    pub instant_operator: Option<String>,
+    pub lockbox_expiry: Option<u32>,
+    pub lockbox_owner: Option<String>,
 }
 
 pub fn find_offer(
@@ -228,8 +324,10 @@ pub fn insert_offer(conn: &Connection, offer: &NewOffer) -> rusqlite::Result<Opt
     let inserted = conn.execute(
         "INSERT OR IGNORE INTO offers (txid, vout, offer_json, give_asset, give_amount, want_asset, \
          want_amount, maker_script, maker_address, funding_script, base, quote, side, base_amount, \
-         quote_amount, price_num, price_den, price, created_at) \
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)",
+         quote_amount, price_num, price_den, price, created_at, kind, instant_operator, lockbox_expiry, \
+         lockbox_owner) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, \
+         ?20, ?21, ?22, ?23)",
         params![
             offer.txid,
             offer.vout,
@@ -250,6 +348,10 @@ pub fn insert_offer(conn: &Connection, offer: &NewOffer) -> rusqlite::Result<Opt
             offer.price_den,
             offer.price,
             offer.created_at,
+            offer.kind,
+            offer.instant_operator,
+            offer.lockbox_expiry,
+            offer.lockbox_owner,
         ],
     )?;
     if inserted == 0 {
@@ -310,6 +412,30 @@ pub fn maker_offers(
     ))?;
     let rows = statement.query_map(params![maker_script, limit, before_id], offer_from_row)?;
     rows.collect()
+}
+
+/// Open instant offers of a lockbox owner (x-only key), newest first.
+pub fn owner_offers(
+    conn: &Connection,
+    owner: &str,
+    limit: u32,
+    before_id: Option<i64>,
+) -> rusqlite::Result<Vec<OfferRecord>> {
+    let mut statement = conn.prepare(&format!(
+        "SELECT {OFFER_COLUMNS} FROM offers WHERE lockbox_owner = ?1 \
+         AND status = 'open' AND (?3 IS NULL OR id < ?3) ORDER BY id DESC LIMIT ?2"
+    ))?;
+    let rows = statement.query_map(params![owner, limit, before_id], offer_from_row)?;
+    rows.collect()
+}
+
+/// Close an open offer without a spend (instant lockbox past EXPIRY − S).
+pub fn mark_expired(conn: &Connection, id: i64, now: i64) -> rusqlite::Result<()> {
+    conn.execute(
+        "UPDATE offers SET status = 'cancelled', closed_at = ?2 WHERE id = ?1 AND status = 'open'",
+        params![id, now],
+    )?;
+    Ok(())
 }
 
 pub fn mark_cancelled(
